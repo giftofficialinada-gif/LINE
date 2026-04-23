@@ -294,6 +294,13 @@
                 <div class="pdf-status" id="pdfStatus"></div>
             </div>
         </div>
+        <div style="display:flex;gap:6px;padding:6px 14px;border-bottom:1px solid #eee;background:#f9fafb;">
+            <button onclick="exportKnowledge()" style="flex:1;background:#4285f4;color:white;border:none;border-radius:6px;padding:6px;font-size:0.76rem;cursor:pointer;">📤 エクスポート</button>
+            <label style="flex:1;background:#34a853;color:white;border-radius:6px;padding:6px;font-size:0.76rem;cursor:pointer;text-align:center;">
+                📥 インポート
+                <input type="file" accept=".json" onchange="importKnowledge(this)" style="display:none;">
+            </label>
+        </div>
         <div class="knowledge-list" id="knowledgeList">
             {% if knowledge_list %}
                 {% for k in knowledge_list %}
@@ -445,9 +452,15 @@
         }
     });
 
-    // APIキー保存
+    // APIキー：環境変数 → localStorage の順で設定
     const apiKeyInput = document.getElementById('apiKey');
-    apiKeyInput.value = localStorage.getItem('claude_api_key') || '';
+    const envApiKey = "{{ env_api_key }}";
+    if (envApiKey) {
+        apiKeyInput.value = envApiKey;
+        localStorage.setItem('claude_api_key', envApiKey);
+    } else {
+        apiKeyInput.value = localStorage.getItem('claude_api_key') || '';
+    }
     apiKeyInput.addEventListener('input', () => localStorage.setItem('claude_api_key', apiKeyInput.value));
 
     // タブ切り替え
@@ -755,6 +768,38 @@
     document.getElementById('settingsModal').addEventListener('click', function(e) {
         if (e.target === this) closeSettings();
     });
+
+    async function exportKnowledge() {
+        const res = await fetch('/api/knowledge/export');
+        const data = await res.json();
+        const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = '知識ベース_バックアップ.json';
+        a.click();
+    }
+
+    async function importKnowledge(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const text = await file.text();
+        try {
+            const data = JSON.parse(text);
+            const res = await fetch('/api/knowledge/import', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (result.success) {
+                alert(`✅ ${result.imported}件のデータをインポートしました。ページを更新します。`);
+                location.reload();
+            }
+        } catch(e) {
+            alert('❌ インポートに失敗しました。正しいファイルか確認してください。');
+        }
+        input.value = '';
+    }
 
     function escapeHtml(str) {
         return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');

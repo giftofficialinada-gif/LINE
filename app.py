@@ -189,10 +189,13 @@ def index():
     settings = load_settings()
     creds_files = glob.glob("*.json")
     creds_files = [f for f in creds_files if f != SETTINGS_PATH]
+    # 環境変数からAPIキーを渡す（フロントのlocalStorageに保存させる）
+    env_api_key = os.environ.get("CLAUDE_API_KEY", "")
     return render_template("index.html",
                            knowledge_list=knowledge_list,
                            settings=settings,
-                           creds_files=creds_files)
+                           creds_files=creds_files,
+                           env_api_key=env_api_key)
 
 
 @app.route("/api/knowledge", methods=["POST"])
@@ -249,6 +252,30 @@ def delete_knowledge(knowledge_id):
     conn.commit()
     conn.close()
     return jsonify({"success": True})
+
+
+@app.route("/api/knowledge/export", methods=["GET"])
+def export_knowledge():
+    knowledge_list = get_all_knowledge()
+    return jsonify({"knowledge": knowledge_list})
+
+
+@app.route("/api/knowledge/import", methods=["POST"])
+def import_knowledge():
+    data = request.json
+    items = data.get("knowledge", [])
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    count = 0
+    for item in items:
+        title = item.get("title", "").strip()
+        content = item.get("content", "").strip()
+        if title and content:
+            c.execute("INSERT INTO knowledge (title, content) VALUES (?, ?)", (title, content))
+            count += 1
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "imported": count})
 
 
 @app.route("/api/settings", methods=["POST"])
@@ -350,6 +377,9 @@ def generate_reply():
     customer_data = data.get("customer_data", None)
     phase_number = data.get("phase", None)
 
+    # 環境変数のAPIキーをフォールバックとして使用
+    if not api_key:
+        api_key = os.environ.get("CLAUDE_API_KEY", "")
     if not customer_message:
         return jsonify({"error": "お客さんのメッセージを入力してください"}), 400
     if not api_key:
