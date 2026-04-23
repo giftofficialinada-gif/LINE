@@ -3,3 +3,4 @@ anthropic==0.96.0
 pypdf==6.10.2
 gspread==6.2.1
 google-auth==2.49.2
+psycopg2-binary==2.9.10

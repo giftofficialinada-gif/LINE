@@ -13,6 +13,48 @@ import io
 app = Flask(__name__)
 DB_PATH = "knowledge.db"
 SETTINGS_PATH = "settings.json"
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+
+
+def get_db_conn():
+    if DATABASE_URL:
+        import psycopg2
+        conn = psycopg2.connect(DATABASE_URL)
+        return conn, "pg"
+    else:
+        conn = sqlite3.connect(DB_PATH)
+        return conn, "sqlite"
+
+
+def db_execute(sql_sqlite, sql_pg, params=()):
+    conn, kind = get_db_conn()
+    try:
+        c = conn.cursor()
+        if kind == "pg":
+            c.execute(sql_pg, params)
+        else:
+            c.execute(sql_sqlite, params)
+        conn.commit()
+        result = c.lastrowid if kind == "sqlite" else None
+        if kind == "pg" and "RETURNING" in (sql_pg or ""):
+            row = c.fetchone()
+            result = row[0] if row else None
+        return result
+    finally:
+        conn.close()
+
+
+def db_fetchall(sql_sqlite, sql_pg, params=()):
+    conn, kind = get_db_conn()
+    try:
+        c = conn.cursor()
+        if kind == "pg":
+            c.execute(sql_pg, params)
+        else:
+            c.execute(sql_sqlite, params)
+        return c.fetchall()
+    finally:
+        conn.close()
 
 SHEET_COLUMNS = [
     "名前", "獲得者", "契約日", "クーリン", "退職日", "仮申請可能日",
@@ -146,27 +188,29 @@ def build_date_context(customer_data):
 
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("""
+    sqlite_sql = """
         CREATE TABLE IF NOT EXISTS knowledge (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
             content TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
-    """)
-    conn.commit()
-    conn.close()
+    """
+    pg_sql = """
+        CREATE TABLE IF NOT EXISTS knowledge (
+            id SERIAL PRIMARY KEY,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """
+    db_execute(sqlite_sql, pg_sql)
 
 
 def get_all_knowledge():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT id, title, content, created_at FROM knowledge ORDER BY created_at DESC")
-    rows = c.fetchall()
-    conn.close()
-    return [{"id": r[0], "title": r[1], "content": r[2], "created_at": r[3]} for r in rows]
+    sql = "SELECT id, title, content, created_at FROM knowledge ORDER BY created_at DESC"
+    rows = db_fetchall(sql, sql)
+    return [{"id": r[0], "title": r[1], "content": r[2], "created_at": str(r[3])} for r in rows]
 
 
 def load_settings():
@@ -205,12 +249,11 @@ def add_knowledge():
     content = data.get("content", "").strip()
     if not title or not content:
         return jsonify({"error": "タイトルと内容を入力してください"}), 400
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO knowledge (title, content) VALUES (?, ?)", (title, content))
-    conn.commit()
-    new_id = c.lastrowid
-    conn.close()
+    new_id = db_execute(
+        "INSERT INTO knowledge (title, content) VALUES (?, ?)",
+        "INSERT INTO knowledge (title, content) VALUES (%s, %s) RETURNING id",
+        (title, content)
+    )
     return jsonify({"success": True, "id": new_id})
 
 
@@ -246,11 +289,11 @@ def upload_pdf():
 
 @app.route("/api/knowledge/<int:knowledge_id>", methods=["DELETE"])
 def delete_knowledge(knowledge_id):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("DELETE FROM knowledge WHERE id = ?", (knowledge_id,))
-    conn.commit()
-    conn.close()
+    db_execute(
+        "DELETE FROM knowledge WHERE id = ?",
+        "DELETE FROM knowledge WHERE id = %s",
+        (knowledge_id,)
+    )
     return jsonify({"success": True})
 
 
@@ -264,17 +307,17 @@ def export_knowledge():
 def import_knowledge():
     data = request.json
     items = data.get("knowledge", [])
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
     count = 0
     for item in items:
         title = item.get("title", "").strip()
         content = item.get("content", "").strip()
         if title and content:
-            c.execute("INSERT INTO knowledge (title, content) VALUES (?, ?)", (title, content))
+            db_execute(
+                "INSERT INTO knowledge (title, content) VALUES (?, ?)",
+                "INSERT INTO knowledge (title, content) VALUES (%s, %s)",
+                (title, content)
+            )
             count += 1
-    conn.commit()
-    conn.close()
     return jsonify({"success": True, "imported": count})
 
 
