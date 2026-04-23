@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>退職支援 AI返信アシスタント</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+            background: #f0f4f8;
+            color: #333;
+        }
+        header {
+            background: #06c755;
+            color: white;
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        header h1 { font-size: 1.1rem; font-weight: 700; }
+        .btn-settings {
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.4);
+            color: white;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 0.82rem;
+            cursor: pointer;
+        }
+        .btn-settings:hover { background: rgba(255,255,255,0.3); }
+
+        .api-bar {
+            background: #fff;
+            border-bottom: 1px solid #ddd;
+            padding: 8px 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .api-bar label { font-size: 0.82rem; color: #666; white-space: nowrap; }
+        .api-bar input {
+            flex: 1;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 5px 10px;
+            font-size: 0.82rem;
+            font-family: monospace;
+        }
+        .api-bar input:focus { outline: none; border-color: #06c755; }
+
+        .container {
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            height: calc(100vh - 90px);
+        }
+
+        /* 左パネル */
+        .panel-left {
+            background: #fff;
+            border-right: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .panel-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid #eee;
+            font-weight: 700;
+            font-size: 0.9rem;
+            color: #555;
+        }
+        .add-form {
+            padding: 10px 14px;
+            border-bottom: 1px solid #eee;
+            background: #f9fafb;
+        }
+        .tab-btns { display: flex; gap: 5px; margin-bottom: 8px; }
+        .tab-btn {
+            flex: 1; padding: 5px;
+            border: 1px solid #ccc; border-radius: 5px;
+            background: #f0f0f0; font-size: 0.78rem; cursor: pointer; font-family: inherit;
+        }
+        .tab-btn.active { background: #06c755; color: white; border-color: #06c755; font-weight: 600; }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+        .add-form input, .add-form textarea {
+            width: 100%; border: 1px solid #ccc; border-radius: 6px;
+            padding: 7px 9px; font-size: 0.82rem; font-family: inherit; margin-bottom: 7px;
+        }
+        .add-form input:focus, .add-form textarea:focus { outline: none; border-color: #06c755; }
+        .add-form textarea { resize: vertical; min-height: 70px; }
+        .btn-add {
+            width: 100%; background: #06c755; color: white; border: none;
+            border-radius: 6px; padding: 7px; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+        }
+        .btn-add:hover { background: #05a847; }
+
+        .pdf-upload-area {
+            border: 2px dashed #ccc; border-radius: 8px; padding: 12px;
+            text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s;
+            margin-bottom: 7px;
+        }
+        .pdf-upload-area:hover, .pdf-upload-area.dragover { border-color: #06c755; background: #f0fff4; }
+        .pdf-upload-area p { font-size: 0.78rem; color: #888; margin-top: 3px; }
+        .pdf-upload-area input[type=file] { display: none; }
+        .pdf-status {
+            font-size: 0.78rem; padding: 5px 9px; border-radius: 5px;
+            margin-bottom: 7px; display: none;
+        }
+        .pdf-status.success { background: #f0fff4; color: #276749; display: block; }
+        .pdf-status.error { background: #fff5f5; color: #c53030; display: block; }
+
+        .knowledge-list { flex: 1; overflow-y: auto; padding: 8px; }
+        .knowledge-item {
+            background: #f9fafb; border: 1px solid #e8eaed; border-radius: 7px;
+            padding: 9px 11px; margin-bottom: 7px; position: relative;
+        }
+        .knowledge-item .k-title { font-weight: 600; font-size: 0.82rem; color: #444; margin-bottom: 3px; padding-right: 24px; }
+        .knowledge-item .k-content {
+            font-size: 0.76rem; color: #666; line-height: 1.5; white-space: pre-wrap;
+            max-height: 55px; overflow: hidden;
+        }
+        .knowledge-item .k-content.expanded { max-height: none; }
+        .btn-expand { background: none; border: none; color: #06c755; font-size: 0.72rem; cursor: pointer; padding: 2px 0; }
+        .btn-delete {
+            position: absolute; top: 7px; right: 7px; background: none; border: none;
+            color: #ccc; font-size: 1rem; cursor: pointer; line-height: 1;
+        }
+        .btn-delete:hover { color: #e53e3e; }
+        .empty-msg { text-align: center; color: #aaa; font-size: 0.82rem; padding: 20px; }
+
+        /* 右パネル */
+        .panel-right { display: flex; flex-direction: column; padding: 18px; gap: 14px; overflow-y: auto; }
+        .section-label { font-weight: 700; font-size: 0.88rem; color: #555; margin-bottom: 5px; }
+
+        /* お客さん選択 */
+        .customer-card {
+            background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 14px;
+        }
+        .customer-select-row { display: flex; gap: 8px; align-items: center; margin-bottom: 0; }
+        .customer-select-row select {
+            flex: 1; border: 1px solid #ccc; border-radius: 6px; padding: 7px 10px;
+            font-size: 0.88rem; font-family: inherit;
+        }
+        .customer-select-row select:focus { outline: none; border-color: #06c755; }
+        .btn-load-customers {
+            background: #4285f4; color: white; border: none; border-radius: 6px;
+            padding: 7px 12px; font-size: 0.82rem; cursor: pointer; white-space: nowrap;
+        }
+        .btn-load-customers:hover { background: #3367d6; }
+        .customer-info {
+            margin-top: 10px; display: none;
+            background: #f0f9ff; border: 1px solid #bee3f8; border-radius: 8px; padding: 10px 12px;
+        }
+        .customer-info.visible { display: block; }
+        .customer-info-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 0.78rem;
+        }
+        .customer-info-item { display: flex; gap: 4px; }
+        .customer-info-item .ci-key { color: #666; white-space: nowrap; }
+        .customer-info-item .ci-val { color: #333; font-weight: 500; }
+        .customer-info-memo {
+            margin-top: 7px; padding-top: 7px; border-top: 1px solid #bee3f8;
+            font-size: 0.78rem; color: #444; line-height: 1.5;
+        }
+
+        .message-input {
+            width: 100%; border: 1px solid #ccc; border-radius: 10px; padding: 11px;
+            font-size: 0.88rem; font-family: inherit; resize: vertical; min-height: 110px;
+        }
+        .message-input:focus { outline: none; border-color: #06c755; }
+        .btn-generate {
+            background: #06c755; color: white; border: none; border-radius: 10px;
+            padding: 12px; font-size: 0.95rem; font-weight: 700; cursor: pointer; width: 100%;
+        }
+        .btn-generate:hover { background: #05a847; }
+        .btn-generate:disabled { background: #aaa; cursor: not-allowed; }
+        .reply-box { display: none; background: #fff; border: 2px solid #06c755; border-radius: 10px; padding: 14px; }
+        .reply-box.visible { display: block; }
+        .reply-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .reply-header span { font-weight: 700; color: #06c755; font-size: 0.88rem; }
+        .btn-copy {
+            background: #06c755; color: white; border: none; border-radius: 6px;
+            padding: 5px 12px; font-size: 0.82rem; cursor: pointer;
+        }
+        .btn-copy:hover { background: #05a847; }
+        .reply-text { font-size: 0.88rem; line-height: 1.7; white-space: pre-wrap; color: #333; }
+        .error-box {
+            display: none; background: #fff5f5; border: 1px solid #fc8181;
+            border-radius: 8px; padding: 10px 14px; color: #c53030; font-size: 0.82rem;
+        }
+        .error-box.visible { display: block; }
+        .loading { display: none; text-align: center; color: #888; font-size: 0.88rem; padding: 10px; }
+        .loading.visible { display: block; }
+        @keyframes dots { 0%,20%{content:''}40%{content:'.'}60%{content:'..'}80%,100%{content:'...'} }
+        .loading::after { content: ''; animation: dots 1.5s infinite; }
+
+        /* 設定モーダル */
+        .modal-overlay {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100;
+            align-items: center; justify-content: center;
+        }
+        .modal-overlay.visible { display: flex; }
+        .modal {
+            background: #fff; border-radius: 12px; padding: 24px; width: 480px;
+            max-width: 90vw; max-height: 80vh; overflow-y: auto;
+        }
+        .modal h2 { font-size: 1rem; margin-bottom: 16px; color: #333; }
+        .modal label { display: block; font-size: 0.82rem; color: #666; margin-bottom: 4px; margin-top: 12px; }
+        .modal select, .modal input[type=text] {
+            width: 100%; border: 1px solid #ccc; border-radius: 6px;
+            padding: 7px 10px; font-size: 0.85rem; font-family: inherit;
+        }
+        .modal select:focus, .modal input:focus { outline: none; border-color: #06c755; }
+        .modal-note { font-size: 0.76rem; color: #888; margin-top: 4px; line-height: 1.5; }
+        .modal-btns { display: flex; gap: 8px; margin-top: 18px; }
+        .btn-save {
+            flex: 1; background: #06c755; color: white; border: none;
+            border-radius: 8px; padding: 9px; font-weight: 700; cursor: pointer; font-size: 0.88rem;
+        }
+        .btn-save:hover { background: #05a847; }
+        .btn-cancel {
+            flex: 1; background: #f0f0f0; color: #555; border: none;
+            border-radius: 8px; padding: 9px; cursor: pointer; font-size: 0.88rem;
+        }
+        .btn-cancel:hover { background: #e0e0e0; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>💬 退職支援 AI返信アシスタント</h1>
+    <button class="btn-settings" onclick="openSettings()">⚙️ スプレッドシート設定</button>
+</header>
+
+<div class="api-bar">
+    <label>Claude APIキー：</label>
+    <input type="password" id="apiKey" placeholder="sk-ant-..." />
+</div>
+
+<div class="container">
+    <!-- 左：知識ベース -->
+    <div class="panel-left">
+        <div class="panel-header">📂 サポートデータ（知識ベース）</div>
+        <div class="add-form">
+            <div class="tab-btns">
+                <button class="tab-btn active" onclick="switchTab('text')">✏️ テキスト</button>
+                <button class="tab-btn" onclick="switchTab('pdf')">📄 PDF</button>
+            </div>
+            <div class="tab-panel active" id="tab-text">
+                <input type="text" id="kTitle" placeholder="タイトル（例：よくある質問、退職手続きの流れ）" />
+                <textarea id="kContent" placeholder="内容を貼り付けてください"></textarea>
+                <button class="btn-add" onclick="addKnowledge()">＋ 追加する</button>
+            </div>
+            <div class="tab-panel" id="tab-pdf">
+                <div class="pdf-upload-area" id="pdfDropArea" onclick="document.getElementById('pdfInput').click()">
+                    <input type="file" id="pdfInput" accept=".pdf" onchange="uploadPdf(this.files[0])">
+                    <div style="font-size:1.6rem">📄</div>
+                    <strong style="font-size:0.84rem">クリックまたはドラッグ＆ドロップ</strong>
+                    <p>PDFファイルを選択してください</p>
+                </div>
+                <div class="pdf-status" id="pdfStatus"></div>
+            </div>
+        </div>
+        <div class="knowledge-list" id="knowledgeList">
+            {% if knowledge_list %}
+                {% for k in knowledge_list %}
+                <div class="knowledge-item" id="k-{{ k.id }}">
+                    <div class="k-title">{{ k.title }}</div>
+                    <div class="k-content" id="kc-{{ k.id }}">{{ k.content }}</div>
+                    <button class="btn-expand" onclick="toggleExpand({{ k.id }})">続きを見る</button>
+                    <button class="btn-delete" onclick="deleteKnowledge({{ k.id }})">✕</button>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-msg" id="emptyMsg">データがまだありません。<br>上のフォームから追加してください。</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 右：返信作成 -->
+    <div class="panel-right">
+
+        <!-- お客さん選択 -->
+        <div class="customer-card">
+            <div class="section-label">👤 お客さんを選択（スプレッドシート連携）</div>
+            <div class="customer-select-row">
+                <input type="text" id="customerSearch" placeholder="名前・契約日で検索..." oninput="filterCustomers()"
+                    style="flex:1;border:1px solid #ccc;border-radius:6px;padding:7px 10px;font-size:0.88rem;font-family:inherit;">
+                <button class="btn-load-customers" onclick="loadCustomers()">🔄 読み込む</button>
+            </div>
+            <select id="customerSelect" onchange="onCustomerChange()" size="5"
+                style="width:100%;margin-top:6px;border:1px solid #ccc;border-radius:6px;padding:4px;font-size:0.88rem;font-family:inherit;">
+                <option value="">-- 読み込むボタンを押してください --</option>
+            </select>
+            <div id="searchCount" style="font-size:0.75rem;color:#888;margin-top:3px;"></div>
+            <div class="customer-info" id="customerInfo">
+                <div class="customer-info-grid" id="customerInfoGrid"></div>
+                <div class="customer-info-memo" id="customerInfoMemo"></div>
+            </div>
+        </div>
+
+        <!-- フェーズ選択 -->
+        <div>
+            <div class="section-label">📊 現在のフェーズ</div>
+            <select id="phaseSelect" style="width:100%;border:1px solid #ccc;border-radius:8px;padding:8px 10px;font-size:0.88rem;font-family:inherit;">
+                <option value="">-- フェーズを選択（任意）--</option>
+                <option value="1">フェーズ1：クリニック受診済み（退職前）</option>
+                <option value="2">フェーズ2：持ち物案内 送付済み</option>
+                <option value="3">フェーズ3：転職希望日案内 送付済み</option>
+                <option value="4">フェーズ4：退職前の準備完了</option>
+                <option value="5">フェーズ5：退職日案内 送付済み</option>
+                <option value="6">フェーズ6：離職票到着・意見書取得済み</option>
+                <option value="7">フェーズ7：主治医の意見書 記載済み</option>
+                <option value="8">フェーズ8：ハローワーク提出・給付日数延長確認済み</option>
+                <option value="9">フェーズ9：卒業（給付確認完了）</option>
+            </select>
+            <div id="phaseDesc" style="font-size:0.76rem;color:#666;margin-top:5px;padding:6px 8px;background:#f9fafb;border-radius:6px;display:none;"></div>
+        </div>
+
+        <!-- メッセージ入力 -->
+        <div>
+            <div class="section-label">📩 お客さんからのメッセージ</div>
+            <textarea class="message-input" id="customerMessage" placeholder="お客さんから届いたLINEメッセージをここに貼り付けてください..."></textarea>
+        </div>
+
+        <button class="btn-generate" onclick="generateReply()">✨ AI返信文を作成する</button>
+
+        <div class="loading" id="loading">AIが返信文を考えています</div>
+        <div class="error-box" id="errorBox"></div>
+
+        <div class="reply-box" id="replyBox">
+            <div class="reply-header">
+                <span>✅ 作成された返信文</span>
+                <button class="btn-copy" onclick="copyReply()">コピー</button>
+            </div>
+            <div class="reply-text" id="replyText"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 設定モーダル -->
+<div class="modal-overlay" id="settingsModal">
+    <div class="modal">
+        <h2>⚙️ スプレッドシート設定</h2>
+
+        <label>認証情報ファイル（JSONファイル）</label>
+        <select id="credsFile">
+            <option value="">-- ファイルを選択 --</option>
+            {% for f in creds_files %}
+            <option value="{{ f }}" {% if settings.creds_file == f %}selected{% endif %}>{{ f }}</option>
+            {% endfor %}
+        </select>
+        <p class="modal-note">
+            line_assistant フォルダ内にある JSON ファイルが表示されます。<br>
+            Google Cloud から取得したサービスアカウントの JSON を入れてください。
+        </p>
+
+        <label>スプレッドシートID</label>
+        <input type="text" id="spreadsheetId" placeholder="例：1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
+               value="{{ settings.spreadsheet_id or '' }}" />
+        <p class="modal-note">
+            スプレッドシートのURL中の <code>/d/</code> と <code>/edit</code> の間の文字列です。<br>
+            例：docs.google.com/spreadsheets/d/<strong>〇〇〇〇〇</strong>/edit
+        </p>
+
+        <label>シート（タブ）を選択</label>
+        <div style="display:flex;gap:6px;align-items:center;">
+            <select id="sheetName" style="flex:1">
+                <option value="">-- 先に「シート一覧を取得」を押してください --</option>
+                {% if settings.sheet_name %}
+                <option value="{{ settings.sheet_name }}" selected>{{ settings.sheet_name }}</option>
+                {% endif %}
+            </select>
+            <button type="button" onclick="loadSheets()"
+                style="background:#4285f4;color:white;border:none;border-radius:6px;padding:7px 10px;font-size:0.78rem;cursor:pointer;white-space:nowrap;">
+                シート一覧を取得
+            </button>
+        </div>
+        <p class="modal-note" id="sheetLoadMsg">認証情報とIDを入力してからボタンを押してください。</p>
+
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="closeSettings()">キャンセル</button>
+            <button class="btn-save" onclick="saveSettings()">保存する</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let customersData = [];
+    let selectedCustomer = null;
+
+    const phaseDescriptions = {
+        1: "退職前。クリニックの予約・受診が完了しています。次は必要な持ち物の案内を送る段階です。",
+        2: "必要な持ち物の案内を送付済み。退職日に向けた準備状況を確認する段階です。",
+        3: "転職希望日の案内を送付済み。就職希望日の意向を確認しスケジュールを整理する段階です。",
+        4: "退職前の準備が完了。退職日当日に向けた最終確認をする段階です。",
+        5: "退職日に「国民健康保険の切り替え・減額」「退職後の流れ」の案内を送付済み。離職票の到着を待ちながらフォローする段階です。",
+        6: "離職票が到着し、ハローワークで主治医の意見書用紙を取得済み。クリニックに意見書の記載を依頼する段階です。",
+        7: "主治医が意見書を記載済み。ハローワークに提出して給付日数の延長を確認する段階です。",
+        8: "ハローワークへ意見書を提出し給付日数の延長を確認済み。雇用保険説明会への参加準備をする段階です。",
+        9: "雇用保険説明会に参加し受給資格者証を取得。給付日数の延長を最終確認済み。卒業！"
+    };
+
+    document.getElementById('phaseSelect').addEventListener('change', function() {
+        const desc = document.getElementById('phaseDesc');
+        const val = this.value;
+        if (val && phaseDescriptions[val]) {
+            desc.textContent = phaseDescriptions[val];
+            desc.style.display = 'block';
+        } else {
+            desc.style.display = 'none';
+        }
+    });
+
+    // APIキー保存
+    const apiKeyInput = document.getElementById('apiKey');
+    apiKeyInput.value = localStorage.getItem('claude_api_key') || '';
+    apiKeyInput.addEventListener('input', () => localStorage.setItem('claude_api_key', apiKeyInput.value));
+
+    // タブ切り替え
+    function switchTab(tab) {
+        document.querySelectorAll('.tab-btn').forEach((b, i) => {
+            b.classList.toggle('active', (i === 0 && tab === 'text') || (i === 1 && tab === 'pdf'));
+        });
+        document.getElementById('tab-text').classList.toggle('active', tab === 'text');
+        document.getElementById('tab-pdf').classList.toggle('active', tab === 'pdf');
+    }
+
+    // 知識ベース追加
+    async function addKnowledge() {
+        const title = document.getElementById('kTitle').value.trim();
+        const content = document.getElementById('kContent').value.trim();
+        if (!title || !content) { alert('タイトルと内容を両方入力してください'); return; }
+        const res = await fetch('/api/knowledge', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({title, content})
+        });
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('kTitle').value = '';
+            document.getElementById('kContent').value = '';
+            const emptyMsg = document.getElementById('emptyMsg');
+            if (emptyMsg) emptyMsg.remove();
+            const list = document.getElementById('knowledgeList');
+            const item = document.createElement('div');
+            item.className = 'knowledge-item';
+            item.id = `k-${data.id}`;
+            item.innerHTML = `
+                <div class="k-title">${escapeHtml(title)}</div>
+                <div class="k-content" id="kc-${data.id}">${escapeHtml(content)}</div>
+                <button class="btn-expand" onclick="toggleExpand(${data.id})">続きを見る</button>
+                <button class="btn-delete" onclick="deleteKnowledge(${data.id})">✕</button>
+            `;
+            list.prepend(item);
+        } else { alert(data.error); }
+    }
+
+    async function deleteKnowledge(id) {
+        if (!confirm('このデータを削除しますか？')) return;
+        await fetch(`/api/knowledge/${id}`, {method: 'DELETE'});
+        document.getElementById(`k-${id}`).remove();
+        if (document.querySelectorAll('.knowledge-item').length === 0) {
+            document.getElementById('knowledgeList').innerHTML =
+                '<div class="empty-msg" id="emptyMsg">データがまだありません。<br>上のフォームから追加してください。</div>';
+        }
+    }
+
+    function toggleExpand(id) {
+        const el = document.getElementById(`kc-${id}`);
+        el.classList.toggle('expanded');
+        el.nextElementSibling.textContent = el.classList.contains('expanded') ? '折りたたむ' : '続きを見る';
+    }
+
+    // PDF
+    async function uploadPdf(file) {
+        if (!file) return;
+        const status = document.getElementById('pdfStatus');
+        status.className = 'pdf-status';
+        status.textContent = '読み込み中...';
+        status.style.display = 'block';
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+            const res = await fetch('/api/upload_pdf', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (data.success) {
+                status.className = 'pdf-status success';
+                status.textContent = `✅ 「${data.title}」を登録しました（${data.chars.toLocaleString()}文字）`;
+                const emptyMsg = document.getElementById('emptyMsg');
+                if (emptyMsg) emptyMsg.remove();
+                const list = document.getElementById('knowledgeList');
+                const item = document.createElement('div');
+                item.className = 'knowledge-item';
+                item.id = `k-${data.id}`;
+                item.innerHTML = `
+                    <div class="k-title">📄 ${escapeHtml(data.title)}</div>
+                    <div class="k-content" id="kc-${data.id}">（PDFから読み込み済み）</div>
+                    <button class="btn-expand" onclick="toggleExpand(${data.id})">続きを見る</button>
+                    <button class="btn-delete" onclick="deleteKnowledge(${data.id})">✕</button>
+                `;
+                list.prepend(item);
+                document.getElementById('pdfInput').value = '';
+            } else {
+                status.className = 'pdf-status error';
+                status.textContent = `❌ ${data.error}`;
+            }
+        } catch (e) {
+            status.className = 'pdf-status error';
+            status.textContent = '❌ アップロードに失敗しました';
+        }
+    }
+
+    const dropArea = document.getElementById('pdfDropArea');
+    dropArea.addEventListener('dragover', e => { e.preventDefault(); dropArea.classList.add('dragover'); });
+    dropArea.addEventListener('dragleave', () => dropArea.classList.remove('dragover'));
+    dropArea.addEventListener('drop', e => {
+        e.preventDefault(); dropArea.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file) uploadPdf(file);
+    });
+
+    function filterCustomers() {
+        const query = document.getElementById('customerSearch').value.trim().toLowerCase();
+        const select = document.getElementById('customerSelect');
+        const count = document.getElementById('searchCount');
+        select.innerHTML = '';
+        const blank = document.createElement('option');
+        blank.value = '';
+        blank.textContent = '-- お客さんを選んでください --';
+        select.appendChild(blank);
+
+        const filtered = customersData.filter(c => {
+            const name = (c.name || '').toLowerCase();
+            const contractDate = (c.data['契約日'] || '').toLowerCase();
+            return !query || name.includes(query) || contractDate.includes(query);
+        });
+
+        filtered.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.index;
+            const contractDate = c.data['契約日'] ? `　${c.data['契約日']}` : '';
+            opt.textContent = c.name + contractDate;
+            select.appendChild(opt);
+        });
+
+        count.textContent = customersData.length > 0
+            ? `${filtered.length} / ${customersData.length} 件表示`
+            : '';
+    }
+
+    // お客さん読み込み
+    async function loadCustomers() {
+        const btn = document.querySelector('.btn-load-customers');
+        btn.textContent = '読み込み中...';
+        btn.disabled = true;
+        try {
+            const res = await fetch('/api/customers');
+            const data = await res.json();
+            if (data.customers) {
+                customersData = data.customers;
+                document.getElementById('customerSearch').value = '';
+                filterCustomers();
+                btn.textContent = `✅ ${data.customers.length}件`;
+            } else {
+                alert('エラー：' + (data.error || '読み込みに失敗しました'));
+                btn.textContent = '🔄 読み込む';
+            }
+        } catch (e) {
+            alert('通信エラーが発生しました');
+            btn.textContent = '🔄 読み込む';
+        }
+        btn.disabled = false;
+    }
+
+    function onCustomerChange() {
+        const select = document.getElementById('customerSelect');
+        const idx = select.value;
+        const infoBox = document.getElementById('customerInfo');
+        if (idx === '') {
+            infoBox.classList.remove('visible');
+            selectedCustomer = null;
+            return;
+        }
+        const customer = customersData.find(c => String(c.index) === String(idx));
+        if (!customer) return;
+        selectedCustomer = customer.data;
+
+        // フェーズを自動セット（W列から直接取得）
+        const phaseVal = customer.phase || customer.data["フェーズ"] || customer.data["状況"] || "";
+        const phaseNum = parseInt(phaseVal);
+        const phaseSelect = document.getElementById('phaseSelect');
+        if (phaseNum >= 1 && phaseNum <= 9) {
+            phaseSelect.value = String(phaseNum);
+            phaseSelect.dispatchEvent(new Event('change'));
+        } else {
+            phaseSelect.value = "";
+            document.getElementById('phaseDesc').style.display = 'none';
+        }
+
+        const grid = document.getElementById('customerInfoGrid');
+        const memo = document.getElementById('customerInfoMemo');
+        const showKeys = ["状況", "契約日", "退職日", "年齢", "支払い方法", "入金確認",
+                          "傷病手当申請の有無", "障害者手帳の有無", "クリニック名", "次回受診日", "就職希望日"];
+        grid.innerHTML = '';
+        showKeys.forEach(key => {
+            const val = customer.data[key];
+            if (val && String(val).trim()) {
+                const div = document.createElement('div');
+                div.className = 'customer-info-item';
+                div.innerHTML = `<span class="ci-key">${escapeHtml(key)}：</span><span class="ci-val">${escapeHtml(String(val))}</span>`;
+                grid.appendChild(div);
+            }
+        });
+        const memoVal = customer.data["メモ"];
+        if (memoVal && String(memoVal).trim()) {
+            memo.innerHTML = `<strong>メモ：</strong>${escapeHtml(String(memoVal))}`;
+            memo.style.display = 'block';
+        } else {
+            memo.style.display = 'none';
+        }
+        infoBox.classList.add('visible');
+    }
+
+    // 返信生成
+    async function generateReply() {
+        const message = document.getElementById('customerMessage').value.trim();
+        const apiKey = document.getElementById('apiKey').value.trim();
+        const btn = document.querySelector('.btn-generate');
+        const loading = document.getElementById('loading');
+        const errorBox = document.getElementById('errorBox');
+        const replyBox = document.getElementById('replyBox');
+
+        errorBox.classList.remove('visible');
+        replyBox.classList.remove('visible');
+
+        if (!message) { showError('お客さんのメッセージを入力してください'); return; }
+        if (!apiKey) { showError('画面上部にClaude APIキーを入力してください'); return; }
+
+        btn.disabled = true;
+        loading.classList.add('visible');
+        try {
+            const body = { message, api_key: apiKey };
+            if (selectedCustomer) body.customer_data = selectedCustomer;
+            const phase = document.getElementById('phaseSelect').value;
+            if (phase) body.phase = phase;
+            const res = await fetch('/api/generate', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            if (data.reply) {
+                document.getElementById('replyText').textContent = data.reply;
+                replyBox.classList.add('visible');
+            } else { showError(data.error || 'エラーが発生しました'); }
+        } catch (e) { showError('通信エラーが発生しました'); }
+        finally { btn.disabled = false; loading.classList.remove('visible'); }
+    }
+
+    function showError(msg) {
+        const el = document.getElementById('errorBox');
+        el.textContent = msg;
+        el.classList.add('visible');
+    }
+
+    async function copyReply() {
+        const text = document.getElementById('replyText').textContent;
+        await navigator.clipboard.writeText(text);
+        const btn = document.querySelector('.btn-copy');
+        btn.textContent = 'コピーしました！';
+        setTimeout(() => btn.textContent = 'コピー', 2000);
+    }
+
+    // 設定
+    function openSettings() { document.getElementById('settingsModal').classList.add('visible'); }
+    function closeSettings() { document.getElementById('settingsModal').classList.remove('visible'); }
+
+    async function loadSheets() {
+        const msg = document.getElementById('sheetLoadMsg');
+        msg.textContent = '取得中...';
+        // 一時的に現在の入力値で保存してから取得
+        const credsFile = document.getElementById('credsFile').value;
+        const spreadsheetId = document.getElementById('spreadsheetId').value.trim();
+        await fetch('/api/settings', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ creds_file: credsFile, spreadsheet_id: spreadsheetId })
+        });
+        try {
+            const res = await fetch('/api/sheets');
+            const data = await res.json();
+            if (data.sheets) {
+                const sel = document.getElementById('sheetName');
+                const current = sel.value;
+                sel.innerHTML = '<option value="">-- シートを選択 --</option>';
+                data.sheets.forEach(s => {
+                    const opt = document.createElement('option');
+                    opt.value = s;
+                    opt.textContent = s;
+                    if (s === current) opt.selected = true;
+                    sel.appendChild(opt);
+                });
+                msg.textContent = `${data.sheets.length}件のシートが見つかりました。顧客データが入っているシートを選んでください。`;
+            } else {
+                msg.textContent = 'エラー：' + (data.error || '取得失敗');
+            }
+        } catch(e) {
+            msg.textContent = '通信エラーが発生しました';
+        }
+    }
+
+    async function saveSettings() {
+        const credsFile = document.getElementById('credsFile').value;
+        const spreadsheetId = document.getElementById('spreadsheetId').value.trim();
+        const sheetName = document.getElementById('sheetName').value;
+        await fetch('/api/settings', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ creds_file: credsFile, spreadsheet_id: spreadsheetId, sheet_name: sheetName })
+        });
+        closeSettings();
+        alert('設定を保存しました');
+    }
+
+    document.getElementById('settingsModal').addEventListener('click', function(e) {
+        if (e.target === this) closeSettings();
+    });
+
+    function escapeHtml(str) {
+        return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+</script>
+</body>
+</html>
