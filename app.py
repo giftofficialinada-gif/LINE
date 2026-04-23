@@ -358,9 +358,10 @@ def get_gspread_worksheet(settings):
 @app.route("/api/sheets", methods=["GET"])
 def get_sheets():
     settings = load_settings()
+    env_creds = os.environ.get("GOOGLE_CREDENTIALS_JSON")
     creds_file = settings.get("creds_file")
-    spreadsheet_id = settings.get("spreadsheet_id", "").strip()
-    if not creds_file or not os.path.exists(creds_file):
+    spreadsheet_id = os.environ.get("SPREADSHEET_ID") or settings.get("spreadsheet_id", "").strip()
+    if not env_creds and (not creds_file or not os.path.exists(creds_file)):
         return jsonify({"error": "認証情報ファイルが設定されていません"}), 400
     if not spreadsheet_id:
         return jsonify({"error": "スプレッドシートIDが設定されていません"}), 400
@@ -375,10 +376,11 @@ def get_sheets():
 @app.route("/api/customers", methods=["GET"])
 def get_customers():
     settings = load_settings()
+    env_creds = os.environ.get("GOOGLE_CREDENTIALS_JSON")
     creds_file = settings.get("creds_file")
-    spreadsheet_id = settings.get("spreadsheet_id", "").strip()
+    spreadsheet_id = os.environ.get("SPREADSHEET_ID") or settings.get("spreadsheet_id", "").strip()
 
-    if not creds_file or not os.path.exists(creds_file):
+    if not env_creds and (not creds_file or not os.path.exists(creds_file)):
         return jsonify({"error": "認証情報ファイルが設定されていません"}), 400
     if not spreadsheet_id:
         return jsonify({"error": "スプレッドシートIDが設定されていません"}), 400
