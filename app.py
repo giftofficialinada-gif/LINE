@@ -422,6 +422,7 @@ def generate_reply():
     api_key = data.get("api_key", "").strip()
     customer_data = data.get("customer_data", None)
     phase_number = data.get("phase", None)
+    owner_note = data.get("owner_note", "").strip()
 
     # 環境変数のAPIキーをフォールバックとして使用
     if not api_key:
@@ -474,6 +475,9 @@ def generate_reply():
             system_prompt += "\n\n経過済みの日付がある場合はその事実を踏まえ、次のステップを案内してください。直近の日付がある場合はその準備を促してください。"
 
         system_prompt += "\n\nお客様情報・フェーズ・日付状況を踏まえて、その方の状況に合った返信をしてください。"
+
+    if owner_note:
+        system_prompt += f"\n\n【オーナーからの補足情報】\n{owner_note}\n\nこの補足情報を特に重視して、返信の内容やトーンに反映させてください。"
 
     if knowledge_text:
         system_prompt += f"\n\n【サポートデータ・参考情報】\n{knowledge_text}"

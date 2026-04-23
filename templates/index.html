@@ -378,6 +378,12 @@
             <div id="phaseDesc" style="font-size:0.76rem;color:#666;margin-top:5px;padding:6px 8px;background:#f9fafb;border-radius:6px;display:none;"></div>
         </div>
 
+        <!-- オーナー補足情報 -->
+        <div>
+            <div class="section-label">📝 補足情報（オーナーメモ）</div>
+            <textarea id="ownerNote" style="width:100%;border:1px solid #ccc;border-radius:10px;padding:11px;font-size:0.88rem;font-family:inherit;resize:vertical;min-height:70px;" placeholder="例：先日電話で少し不安そうだった、退職を迷っているようだった、など..."></textarea>
+        </div>
+
         <!-- メッセージ入力 -->
         <div>
             <div class="section-label">📩 お客さんからのメッセージ</div>
@@ -710,6 +716,8 @@
             if (selectedCustomer) body.customer_data = selectedCustomer;
             const phase = document.getElementById('phaseSelect').value;
             if (phase) body.phase = phase;
+            const ownerNote = document.getElementById('ownerNote').value.trim();
+            if (ownerNote) body.owner_note = ownerNote;
             const res = await fetch('/api/generate', {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(body)
