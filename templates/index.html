@@ -299,6 +299,7 @@
             <div class="tab-btns">
                 <button class="tab-btn active" onclick="switchTab('text')">✏️ テキスト</button>
                 <button class="tab-btn" onclick="switchTab('pdf')">📄 PDF</button>
+                <button class="tab-btn" onclick="switchTab('image')">🖼️ 画像</button>
             </div>
             <div class="tab-panel active" id="tab-text">
                 <input type="text" id="kTitle" placeholder="タイトル（例：よくある質問、退職手続きの流れ）" />
@@ -313,6 +314,16 @@
                     <p>PDFファイルを選択してください</p>
                 </div>
                 <div class="pdf-status" id="pdfStatus"></div>
+            </div>
+            <div class="tab-panel" id="tab-image">
+                <div class="pdf-upload-area" id="imageDropArea" onclick="document.getElementById('imageInput').click()">
+                    <input type="file" id="imageInput" accept=".jpg,.jpeg,.png,.gif,.webp" onchange="uploadImage(this.files[0])">
+                    <div style="font-size:1.6rem">🖼️</div>
+                    <strong style="font-size:0.84rem">クリックまたはドラッグ＆ドロップ</strong>
+                    <p>JPG・PNG・GIF・WebP形式</p>
+                </div>
+                <div class="pdf-status" id="imageStatus"></div>
+                <p style="font-size:0.74rem;color:#999;margin-top:4px;line-height:1.5;">※ AIが画像のテキスト・内容を読み取って知識ベースに保存します（APIキー必要）</p>
             </div>
         </div>
         <div style="display:flex;gap:6px;padding:6px 14px;border-bottom:1px solid #eee;background:#f9fafb;">
@@ -493,10 +504,15 @@
     // タブ切り替え
     function switchTab(tab) {
         document.querySelectorAll('.tab-btn').forEach((b, i) => {
-            b.classList.toggle('active', (i === 0 && tab === 'text') || (i === 1 && tab === 'pdf'));
+            b.classList.toggle('active',
+                (i === 0 && tab === 'text') ||
+                (i === 1 && tab === 'pdf') ||
+                (i === 2 && tab === 'image')
+            );
         });
         document.getElementById('tab-text').classList.toggle('active', tab === 'text');
         document.getElementById('tab-pdf').classList.toggle('active', tab === 'pdf');
+        document.getElementById('tab-image').classList.toggle('active', tab === 'image');
     }
 
     // 知識ベース追加
@@ -591,6 +607,62 @@
         const file = e.dataTransfer.files[0];
         if (file) uploadPdf(file);
     });
+
+    const imageDropArea = document.getElementById('imageDropArea');
+    imageDropArea.addEventListener('dragover', e => { e.preventDefault(); imageDropArea.classList.add('dragover'); });
+    imageDropArea.addEventListener('dragleave', () => imageDropArea.classList.remove('dragover'));
+    imageDropArea.addEventListener('drop', e => {
+        e.preventDefault(); imageDropArea.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file) uploadImage(file);
+    });
+
+    async function uploadImage(file) {
+        if (!file) return;
+        const status = document.getElementById('imageStatus');
+        status.className = 'pdf-status';
+        status.textContent = '画像を読み取り中…（少し時間がかかります）';
+        status.style.display = 'block';
+
+        const apiKey = document.getElementById('apiKey').value.trim();
+        if (!apiKey) {
+            status.className = 'pdf-status error';
+            status.textContent = '❌ 画面上部にClaude APIキーを入力してください';
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('api_key', apiKey);
+        try {
+            const res = await fetch('/api/upload_image', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (data.success) {
+                status.className = 'pdf-status success';
+                status.textContent = `✅ 「${data.title}」を登録しました（${data.chars.toLocaleString()}文字）`;
+                const emptyMsg = document.getElementById('emptyMsg');
+                if (emptyMsg) emptyMsg.remove();
+                const list = document.getElementById('knowledgeList');
+                const item = document.createElement('div');
+                item.className = 'knowledge-item';
+                item.id = `k-${data.id}`;
+                item.innerHTML = `
+                    <div class="k-title">🖼️ ${escapeHtml(data.title)}</div>
+                    <div class="k-content" id="kc-${data.id}">（画像から読み取り済み）</div>
+                    <button class="btn-expand" onclick="toggleExpand(${data.id})">続きを見る</button>
+                    <button class="btn-delete" onclick="deleteKnowledge(${data.id})">✕</button>
+                `;
+                list.prepend(item);
+                document.getElementById('imageInput').value = '';
+            } else {
+                status.className = 'pdf-status error';
+                status.textContent = `❌ ${data.error}`;
+            }
+        } catch (e) {
+            status.className = 'pdf-status error';
+            status.textContent = '❌ アップロードに失敗しました';
+        }
+    }
 
     function filterCustomers() {
         const query = document.getElementById('customerSearch').value.trim().toLowerCase();

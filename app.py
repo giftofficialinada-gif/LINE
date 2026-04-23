@@ -287,6 +287,62 @@ def upload_pdf():
         return jsonify({"error": f"PDFの読み込みに失敗しました：{str(e)}"}), 500
 
 
+@app.route("/api/upload_image", methods=["POST"])
+def upload_image():
+    if "file" not in request.files:
+        return jsonify({"error": "ファイルが選択されていません"}), 400
+    file = request.files["file"]
+    api_key = request.form.get("api_key", "").strip()
+    if not api_key:
+        api_key = os.environ.get("CLAUDE_API_KEY", "")
+    if not api_key:
+        return jsonify({"error": "Claude APIキーが必要です"}), 400
+
+    ext = os.path.splitext(file.filename.lower())[1]
+    media_type_map = {
+        ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp"
+    }
+    if ext not in media_type_map:
+        return jsonify({"error": "JPG・PNG・GIF・WebP形式の画像を選択してください"}), 400
+
+    try:
+        image_bytes = file.read()
+        image_b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
+        media_type = media_type_map[ext]
+
+        client = anthropic.Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=2048,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": media_type, "data": image_b64}
+                    },
+                    {
+                        "type": "text",
+                        "text": "この画像の内容を詳しく説明してください。テキストが含まれている場合はすべて正確に書き起こしてください。図・表・グラフがある場合はその内容も説明してください。退職支援サービスのサポートスタッフが参考情報として使用します。"
+                    }
+                ]
+            }]
+        )
+        description = response.content[0].text
+        title = file.filename.rsplit(".", 1)[0]
+        new_id = db_execute(
+            "INSERT INTO knowledge (title, content) VALUES (?, ?)",
+            "INSERT INTO knowledge (title, content) VALUES (%s, %s) RETURNING id",
+            (f"🖼️ {title}", description)
+        )
+        return jsonify({"success": True, "id": new_id, "title": title, "chars": len(description)})
+    except anthropic.AuthenticationError:
+        return jsonify({"error": "APIキーが正しくありません"}), 401
+    except Exception as e:
+        return jsonify({"error": f"画像の読み込みに失敗しました：{str(e)}"}), 500
+
+
 @app.route("/api/knowledge/<int:knowledge_id>", methods=["DELETE"])
 def delete_knowledge(knowledge_id):
     db_execute(
