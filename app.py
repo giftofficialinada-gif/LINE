@@ -338,7 +338,8 @@ def get_gspread_worksheet(settings):
     # クラウド環境：環境変数からJSON認証情報を取得
     env_creds = os.environ.get("GOOGLE_CREDENTIALS_JSON")
     if env_creds:
-        creds_dict = json.loads(base64.b64decode(env_creds).decode("utf-8"))
+        padded = env_creds + '=' * (-len(env_creds) % 4)
+        creds_dict = json.loads(base64.b64decode(padded).decode("utf-8"))
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     else:
         # ローカル環境：ファイルから読み込む
