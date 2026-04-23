@@ -57,6 +57,35 @@
             height: calc(100vh - 90px);
         }
 
+        /* モバイル対応 */
+        @media (max-width: 768px) {
+            header h1 { font-size: 0.95rem; }
+            .btn-settings { font-size: 0.75rem; padding: 5px 8px; }
+            .api-bar { padding: 8px 12px; gap: 6px; }
+            .api-bar label { display: none; }
+
+            .container {
+                grid-template-columns: 1fr;
+                height: auto;
+                min-height: calc(100vh - 80px);
+            }
+            .panel-left {
+                border-right: none;
+                border-bottom: 1px solid #ddd;
+                max-height: 320px;
+            }
+            .panel-right {
+                padding: 12px;
+                gap: 10px;
+            }
+            .customer-card { padding: 10px; }
+            .customer-select-row input { font-size: 0.82rem; }
+            .message-input { min-height: 90px; font-size: 0.88rem; }
+            .btn-generate { font-size: 0.9rem; padding: 11px; }
+            .modal { width: 95vw; padding: 16px; }
+            .customer-info-grid { grid-template-columns: 1fr; }
+        }
+
         /* 左パネル */
         .panel-left {
             background: #fff;
