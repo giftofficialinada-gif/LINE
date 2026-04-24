@@ -397,8 +397,24 @@
 
         <!-- メッセージ入力 -->
         <div>
-            <div class="section-label">📩 お客さんからのメッセージ</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+                <div class="section-label" style="margin-bottom:0;">📩 お客さんからのメッセージ</div>
+                <button onclick="openQASave()" style="background:#f0f4ff;color:#4285f4;border:1px solid #c5d3f7;border-radius:6px;padding:5px 10px;font-size:0.78rem;cursor:pointer;white-space:nowrap;">❓ Q&Aとして保存</button>
+            </div>
             <textarea class="message-input" id="customerMessage" placeholder="お客さんから届いたLINEメッセージをここに貼り付けてください..."></textarea>
+        </div>
+
+        <!-- Q&A保存フォーム -->
+        <div id="qaSaveForm" style="display:none;background:#f0f9ff;border:1px solid #bee3f8;border-radius:10px;padding:14px;">
+            <div style="font-weight:700;font-size:0.88rem;color:#2b6cb0;margin-bottom:10px;">💾 Q&Aを知識ベースに保存</div>
+            <div style="font-size:0.8rem;color:#666;margin-bottom:4px;">お客さんの質問：</div>
+            <div id="qaQuestion" style="background:#fff;border:1px solid #ccc;border-radius:6px;padding:8px 10px;font-size:0.82rem;color:#333;margin-bottom:10px;white-space:pre-wrap;max-height:80px;overflow-y:auto;"></div>
+            <div style="font-size:0.8rem;color:#666;margin-bottom:4px;">回答を入力：</div>
+            <textarea id="qaAnswer" style="width:100%;border:1px solid #ccc;border-radius:6px;padding:9px;font-size:0.84rem;font-family:inherit;resize:vertical;min-height:80px;" placeholder="この質問への回答を入力してください..."></textarea>
+            <div style="display:flex;gap:8px;margin-top:8px;">
+                <button onclick="saveQA()" style="flex:1;background:#06c755;color:white;border:none;border-radius:6px;padding:9px;font-size:0.85rem;font-weight:600;cursor:pointer;">💾 保存する</button>
+                <button onclick="closeQASave()" style="flex:1;background:#f0f0f0;color:#555;border:none;border-radius:6px;padding:9px;font-size:0.85rem;cursor:pointer;">キャンセル</button>
+            </div>
         </div>
 
         <button class="btn-generate" onclick="generateReply()">✨ AI返信文を作成する</button>
@@ -904,6 +920,53 @@
 
     function escapeHtml(str) {
         return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    // Q&A保存
+    function openQASave() {
+        const message = document.getElementById('customerMessage').value.trim();
+        if (!message) { alert('お客さんのメッセージを入力してください'); return; }
+        document.getElementById('qaQuestion').textContent = message;
+        document.getElementById('qaAnswer').value = '';
+        document.getElementById('qaSaveForm').style.display = 'block';
+        document.getElementById('qaAnswer').focus();
+    }
+
+    function closeQASave() {
+        document.getElementById('qaSaveForm').style.display = 'none';
+    }
+
+    async function saveQA() {
+        const question = document.getElementById('qaQuestion').textContent.trim();
+        const answer = document.getElementById('qaAnswer').value.trim();
+        if (!answer) { alert('回答を入力してください'); return; }
+        const shortQ = question.length > 25 ? question.slice(0, 25) + '…' : question;
+        const title = `Q&A：${shortQ}`;
+        const content = `Q（お客様の質問）：\n${question}\n\nA（回答）：\n${answer}`;
+        const res = await fetch('/api/knowledge', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({title, content})
+        });
+        const data = await res.json();
+        if (data.success) {
+            closeQASave();
+            const emptyMsg = document.getElementById('emptyMsg');
+            if (emptyMsg) emptyMsg.remove();
+            const list = document.getElementById('knowledgeList');
+            const item = document.createElement('div');
+            item.className = 'knowledge-item';
+            item.id = `k-${data.id}`;
+            item.innerHTML = `
+                <div class="k-title">❓ ${escapeHtml(title)}</div>
+                <div class="k-content" id="kc-${data.id}">${escapeHtml(content)}</div>
+                <button class="btn-expand" onclick="toggleExpand(${data.id})">続きを見る</button>
+                <button class="btn-delete" onclick="deleteKnowledge(${data.id})">✕</button>
+            `;
+            list.prepend(item);
+            alert('✅ Q&Aを保存しました！次回から似た質問に活用されます。');
+        } else {
+            alert('エラー：' + data.error);
+        }
     }
 </script>
 </body>
