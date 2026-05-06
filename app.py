@@ -343,6 +343,63 @@ def upload_image():
         return jsonify({"error": f"画像の読み込みに失敗しました：{str(e)}"}), 500
 
 
+@app.route("/api/extract_attachment", methods=["POST"])
+def extract_attachment():
+    if "file" not in request.files:
+        return jsonify({"error": "ファイルがありません"}), 400
+    file = request.files["file"]
+    api_key = request.form.get("api_key", "").strip()
+    if not api_key:
+        api_key = os.environ.get("CLAUDE_API_KEY", "")
+
+    ext = os.path.splitext(file.filename.lower())[1]
+
+    if ext == ".pdf":
+        try:
+            pdf_bytes = file.read()
+            reader = PdfReader(io.BytesIO(pdf_bytes))
+            text = ""
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+            text = text.strip()
+            if not text:
+                return jsonify({"error": "PDFからテキストを読み取れませんでした（画像PDFは非対応）"}), 400
+            return jsonify({"success": True, "text": text, "filename": file.filename})
+        except Exception as e:
+            return jsonify({"error": f"PDF読み取りエラー：{str(e)}"}), 500
+
+    media_type_map = {
+        ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp"
+    }
+    if ext in media_type_map:
+        if not api_key:
+            return jsonify({"error": "画像の読み取りにはAPIキーが必要です"}), 400
+        try:
+            image_b64 = base64.standard_b64encode(file.read()).decode("utf-8")
+            client = anthropic.Anthropic(api_key=api_key)
+            response = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=2048,
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "source": {"type": "base64", "media_type": media_type_map[ext], "data": image_b64}},
+                        {"type": "text", "text": "この画像の内容を詳しく説明してください。テキストが含まれている場合はすべて正確に書き起こしてください。図・表がある場合もその内容を説明してください。"}
+                    ]
+                }]
+            )
+            return jsonify({"success": True, "text": response.content[0].text, "filename": file.filename})
+        except anthropic.AuthenticationError:
+            return jsonify({"error": "APIキーが正しくありません"}), 401
+        except Exception as e:
+            return jsonify({"error": f"画像読み取りエラー：{str(e)}"}), 500
+
+    return jsonify({"error": "PDF・画像ファイル（JPG/PNG/GIF/WebP）のみ対応しています"}), 400
+
+
 @app.route("/api/knowledge/<int:knowledge_id>", methods=["DELETE"])
 def delete_knowledge(knowledge_id):
     db_execute(
