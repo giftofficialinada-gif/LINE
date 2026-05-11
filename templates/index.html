@@ -450,6 +450,23 @@
             </div>
             <div class="reply-text" id="replyText"></div>
         </div>
+
+        <!-- スタッフ向けQ&A -->
+        <div style="border-top:2px dashed #c4b5fd;padding-top:16px;margin-top:4px;">
+            <div style="font-weight:700;font-size:0.95rem;color:#6d28d9;margin-bottom:4px;">📚 スタッフ向け質問（出典付き）</div>
+            <div style="font-size:0.78rem;color:#7c3aed;margin-bottom:10px;line-height:1.5;">知識ベースの資料を根拠に、出典付きで回答します。お客様への返信とは別に使えます。</div>
+            <textarea id="staffQuestion" style="width:100%;border:1px solid #c4b5fd;border-radius:10px;padding:11px;font-size:0.88rem;font-family:inherit;resize:vertical;min-height:80px;background:#faf5ff;" placeholder="例：傷病手当受給中の場合、失業保険の給付日数はどうなりますか？"></textarea>
+            <button onclick="askStaff()" id="btnAskStaff" style="width:100%;background:#7c3aed;color:white;border:none;border-radius:10px;padding:11px;font-size:0.9rem;font-weight:700;cursor:pointer;margin-top:8px;">🔍 調べる</button>
+            <div id="staffLoading" style="display:none;text-align:center;color:#7c3aed;font-size:0.88rem;padding:10px;">資料を確認中</div>
+            <div id="staffError" style="display:none;background:#fff5f5;border:1px solid #fc8181;border-radius:8px;padding:10px 14px;color:#c53030;font-size:0.82rem;margin-top:8px;"></div>
+            <div id="staffAnswerBox" style="display:none;background:#faf5ff;border:2px solid #7c3aed;border-radius:10px;padding:14px;margin-top:8px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <span style="font-weight:700;color:#6d28d9;font-size:0.88rem;">📖 回答（出典付き）</span>
+                    <button onclick="copyStaffAnswer()" style="background:#7c3aed;color:white;border:none;border-radius:6px;padding:5px 12px;font-size:0.82rem;cursor:pointer;">コピー</button>
+                </div>
+                <div id="staffAnswerText" style="font-size:0.86rem;line-height:1.8;white-space:pre-wrap;color:#333;"></div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -1008,6 +1025,52 @@
 
     function escapeHtml(str) {
         return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    // スタッフ向けQ&A
+    async function askStaff() {
+        const question = document.getElementById('staffQuestion').value.trim();
+        const apiKey = document.getElementById('apiKey').value.trim();
+        const btn = document.getElementById('btnAskStaff');
+        const loading = document.getElementById('staffLoading');
+        const errorEl = document.getElementById('staffError');
+        const answerBox = document.getElementById('staffAnswerBox');
+
+        errorEl.style.display = 'none';
+        answerBox.style.display = 'none';
+        if (!question) { alert('質問を入力してください'); return; }
+        if (!apiKey) { alert('画面上部にClaude APIキーを入力してください'); return; }
+
+        btn.disabled = true;
+        loading.style.display = 'block';
+        try {
+            const res = await fetch('/api/staff_question', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ question, api_key: apiKey })
+            });
+            const data = await res.json();
+            if (data.answer) {
+                document.getElementById('staffAnswerText').textContent = data.answer;
+                answerBox.style.display = 'block';
+            } else {
+                errorEl.textContent = data.error || 'エラーが発生しました';
+                errorEl.style.display = 'block';
+            }
+        } catch(e) {
+            errorEl.textContent = '通信エラーが発生しました';
+            errorEl.style.display = 'block';
+        } finally {
+            btn.disabled = false;
+            loading.style.display = 'none';
+        }
+    }
+
+    async function copyStaffAnswer() {
+        const text = document.getElementById('staffAnswerText').textContent;
+        await navigator.clipboard.writeText(text);
+        const btn = event.target;
+        btn.textContent = 'コピーしました！';
+        setTimeout(() => btn.textContent = 'コピー', 2000);
     }
 
     // URL取得

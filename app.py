@@ -575,6 +575,55 @@ def get_customers():
         return jsonify({"error": f"スプレッドシートの読み込みに失敗しました：{str(e)}"}), 500
 
 
+@app.route("/api/staff_question", methods=["POST"])
+def staff_question():
+    data = request.json
+    question = data.get("question", "").strip()
+    api_key = data.get("api_key", "").strip()
+    if not api_key:
+        api_key = os.environ.get("CLAUDE_API_KEY", "")
+    if not question:
+        return jsonify({"error": "質問を入力してください"}), 400
+    if not api_key:
+        return jsonify({"error": "Claude APIキーを入力してください"}), 400
+
+    knowledge_list = get_all_knowledge()
+    if not knowledge_list:
+        return jsonify({"error": "知識ベースにデータがありません。PDFや資料を追加してください"}), 400
+
+    knowledge_sections = "\n\n---\n\n".join(
+        f"【資料：{k['title']}】\n{k['content']}" for k in knowledge_list
+    )
+
+    system_prompt = f"""あなたは失業保険・雇用保険・退職手続きに関する専門アシスタントです。
+以下の知識ベース（厚生労働省・ハローワーク等の公式資料）を根拠として、スタッフの質問に正確かつ詳細に答えてください。
+
+【回答ルール】
+- 必ず知識ベースの情報を根拠として回答する
+- 回答の各ポイントに「【出典：資料名】」を明記する
+- 知識ベースに記載がない内容は「提供された資料には記載がありません」と正直に伝える
+- 具体的な金額・日数・条件・要件は正確に記載する
+- 箇条書きや見出しを使って見やすく整理する
+- スタッフ向けの専門的な内容で回答する
+
+【知識ベース（参考資料）】
+{knowledge_sections}"""
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=2048,
+            system=system_prompt,
+            messages=[{"role": "user", "content": f"質問：{question}"}]
+        )
+        return jsonify({"answer": response.content[0].text})
+    except anthropic.AuthenticationError:
+        return jsonify({"error": "APIキーが正しくありません"}), 401
+    except Exception as e:
+        return jsonify({"error": f"エラーが発生しました：{str(e)}"}), 500
+
+
 @app.route("/api/generate", methods=["POST"])
 def generate_reply():
     data = request.json
