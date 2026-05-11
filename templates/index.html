@@ -180,6 +180,11 @@
             color: #ccc; font-size: 1rem; cursor: pointer; line-height: 1;
         }
         .btn-delete:hover { color: #e53e3e; }
+        .btn-edit {
+            position: absolute; top: 7px; right: 28px; background: none; border: none;
+            color: #ccc; font-size: 0.85rem; cursor: pointer; line-height: 1;
+        }
+        .btn-edit:hover { color: #4285f4; }
         .empty-msg { text-align: center; color: #aaa; font-size: 0.82rem; padding: 20px; }
 
         /* 右パネル */
@@ -340,6 +345,7 @@
                     <div class="k-title">{{ k.title }}</div>
                     <div class="k-content" id="kc-{{ k.id }}">{{ k.content }}</div>
                     <button class="btn-expand" onclick="toggleExpand({{ k.id }})">続きを見る</button>
+                    <button class="btn-edit" onclick="openEdit({{ k.id }}, this)">✏️</button>
                     <button class="btn-delete" onclick="deleteKnowledge({{ k.id }})">✕</button>
                 </div>
                 {% endfor %}
@@ -436,6 +442,22 @@
                 <button class="btn-copy" onclick="copyReply()">コピー</button>
             </div>
             <div class="reply-text" id="replyText"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 編集モーダル -->
+<div class="modal-overlay" id="editModal">
+    <div class="modal">
+        <h2>✏️ データを編集</h2>
+        <input type="hidden" id="editId">
+        <label>タイトル</label>
+        <input type="text" id="editTitle" placeholder="タイトル">
+        <label>内容</label>
+        <textarea id="editContent" style="width:100%;border:1px solid #ccc;border-radius:6px;padding:8px 10px;font-size:0.85rem;font-family:inherit;resize:vertical;min-height:200px;margin-top:4px;"></textarea>
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="closeEdit()">キャンセル</button>
+            <button class="btn-save" onclick="saveEdit()">保存する</button>
         </div>
     </div>
 </div>
@@ -563,6 +585,7 @@
                 <div class="k-title">${escapeHtml(title)}</div>
                 <div class="k-content" id="kc-${data.id}">${escapeHtml(content)}</div>
                 <button class="btn-expand" onclick="toggleExpand(${data.id})">続きを見る</button>
+                <button class="btn-edit" onclick="openEdit(${data.id}, this)">✏️</button>
                 <button class="btn-delete" onclick="deleteKnowledge(${data.id})">✕</button>
             `;
             list.prepend(item);
@@ -610,6 +633,7 @@
                     <div class="k-title">📄 ${escapeHtml(data.title)}</div>
                     <div class="k-content" id="kc-${data.id}">（PDFから読み込み済み）</div>
                     <button class="btn-expand" onclick="toggleExpand(${data.id})">続きを見る</button>
+                    <button class="btn-edit" onclick="openEdit(${data.id}, this)">✏️</button>
                     <button class="btn-delete" onclick="deleteKnowledge(${data.id})">✕</button>
                 `;
                 list.prepend(item);
@@ -675,6 +699,7 @@
                     <div class="k-title">🖼️ ${escapeHtml(data.title)}</div>
                     <div class="k-content" id="kc-${data.id}">（画像から読み取り済み）</div>
                     <button class="btn-expand" onclick="toggleExpand(${data.id})">続きを見る</button>
+                    <button class="btn-edit" onclick="openEdit(${data.id}, this)">✏️</button>
                     <button class="btn-delete" onclick="deleteKnowledge(${data.id})">✕</button>
                 `;
                 list.prepend(item);
@@ -846,6 +871,47 @@
         setTimeout(() => btn.textContent = 'コピー', 2000);
     }
 
+    // 知識ベース編集
+    function openEdit(id, btn) {
+        const item = document.getElementById(`k-${id}`);
+        const title = item.querySelector('.k-title').textContent.trim();
+        const content = document.getElementById(`kc-${id}`).textContent.trim();
+        document.getElementById('editId').value = id;
+        document.getElementById('editTitle').value = title;
+        document.getElementById('editContent').value = content;
+        document.getElementById('editModal').classList.add('visible');
+    }
+
+    function closeEdit() {
+        document.getElementById('editModal').classList.remove('visible');
+    }
+
+    async function saveEdit() {
+        const id = document.getElementById('editId').value;
+        const title = document.getElementById('editTitle').value.trim();
+        const content = document.getElementById('editContent').value.trim();
+        if (!title || !content) { alert('タイトルと内容を入力してください'); return; }
+        const res = await fetch(`/api/knowledge/${id}`, {
+            method: 'PUT', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({title, content})
+        });
+        const data = await res.json();
+        if (data.success) {
+            document.querySelector(`#k-${id} .k-title`).textContent = title;
+            const contentEl = document.getElementById(`kc-${id}`);
+            contentEl.textContent = content;
+            contentEl.classList.remove('expanded');
+            contentEl.nextElementSibling.textContent = '続きを見る';
+            closeEdit();
+        } else {
+            alert('エラー：' + data.error);
+        }
+    }
+
+    document.getElementById('editModal').addEventListener('click', function(e) {
+        if (e.target === this) closeEdit();
+    });
+
     // 設定
     function openSettings() { document.getElementById('settingsModal').classList.add('visible'); }
     function closeSettings() { document.getElementById('settingsModal').classList.remove('visible'); }
@@ -1012,6 +1078,7 @@
                 <div class="k-title">❓ ${escapeHtml(title)}</div>
                 <div class="k-content" id="kc-${data.id}">${escapeHtml(content)}</div>
                 <button class="btn-expand" onclick="toggleExpand(${data.id})">続きを見る</button>
+                <button class="btn-edit" onclick="openEdit(${data.id}, this)">✏️</button>
                 <button class="btn-delete" onclick="deleteKnowledge(${data.id})">✕</button>
             `;
             list.prepend(item);

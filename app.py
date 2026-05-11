@@ -410,6 +410,21 @@ def delete_knowledge(knowledge_id):
     return jsonify({"success": True})
 
 
+@app.route("/api/knowledge/<int:knowledge_id>", methods=["PUT"])
+def update_knowledge(knowledge_id):
+    data = request.json
+    title = data.get("title", "").strip()
+    content = data.get("content", "").strip()
+    if not title or not content:
+        return jsonify({"error": "タイトルと内容を入力してください"}), 400
+    db_execute(
+        "UPDATE knowledge SET title=?, content=? WHERE id=?",
+        "UPDATE knowledge SET title=%s, content=%s WHERE id=%s",
+        (title, content, knowledge_id)
+    )
+    return jsonify({"success": True})
+
+
 @app.route("/api/knowledge/export", methods=["GET"])
 def export_knowledge():
     knowledge_list = get_all_knowledge()
