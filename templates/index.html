@@ -305,6 +305,7 @@
                 <button class="tab-btn active" onclick="switchTab('text')">✏️ テキスト</button>
                 <button class="tab-btn" onclick="switchTab('pdf')">📄 PDF</button>
                 <button class="tab-btn" onclick="switchTab('image')">🖼️ 画像</button>
+                <button class="tab-btn" onclick="switchTab('url')">🌐 URL</button>
             </div>
             <div class="tab-panel active" id="tab-text">
                 <input type="text" id="kTitle" placeholder="タイトル（例：よくある質問、退職手続きの流れ）" />
@@ -329,6 +330,12 @@
                 </div>
                 <div class="pdf-status" id="imageStatus"></div>
                 <p style="font-size:0.74rem;color:#999;margin-top:4px;line-height:1.5;">※ AIが画像のテキスト・内容を読み取って知識ベースに保存します（APIキー必要）</p>
+            </div>
+            <div class="tab-panel" id="tab-url">
+                <input type="text" id="urlInput" placeholder="https://www.mhlw.go.jp/..." style="margin-bottom:7px;" />
+                <p style="font-size:0.74rem;color:#888;margin-bottom:7px;line-height:1.5;">厚生労働省・ハローワーク等のページURLを貼り付けてください。<br>ページのテキストを自動取得して保存します。</p>
+                <button class="btn-add" onclick="fetchUrl()">🌐 取得して保存</button>
+                <div class="pdf-status" id="urlStatus"></div>
             </div>
         </div>
         <div style="display:flex;gap:6px;padding:6px 14px;border-bottom:1px solid #eee;background:#f9fafb;">
@@ -554,12 +561,14 @@
             b.classList.toggle('active',
                 (i === 0 && tab === 'text') ||
                 (i === 1 && tab === 'pdf') ||
-                (i === 2 && tab === 'image')
+                (i === 2 && tab === 'image') ||
+                (i === 3 && tab === 'url')
             );
         });
         document.getElementById('tab-text').classList.toggle('active', tab === 'text');
         document.getElementById('tab-pdf').classList.toggle('active', tab === 'pdf');
         document.getElementById('tab-image').classList.toggle('active', tab === 'image');
+        document.getElementById('tab-url').classList.toggle('active', tab === 'url');
     }
 
     // 知識ベース追加
@@ -999,6 +1008,55 @@
 
     function escapeHtml(str) {
         return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    // URL取得
+    async function fetchUrl() {
+        const url = document.getElementById('urlInput').value.trim();
+        const status = document.getElementById('urlStatus');
+        if (!url) { alert('URLを入力してください'); return; }
+        status.className = 'pdf-status';
+        status.textContent = 'ページを取得中…（数秒かかります）';
+        status.style.display = 'block';
+        try {
+            const res = await fetch('/api/fetch_url', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ url })
+            });
+            const data = await res.json();
+            if (data.success) {
+                const saveRes = await fetch('/api/knowledge', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ title: `🌐 ${data.title}`, content: data.text })
+                });
+                const saveData = await saveRes.json();
+                if (saveData.success) {
+                    status.className = 'pdf-status success';
+                    status.textContent = `✅ 「${data.title}」を保存しました（${data.chars.toLocaleString()}文字）`;
+                    const emptyMsg = document.getElementById('emptyMsg');
+                    if (emptyMsg) emptyMsg.remove();
+                    const list = document.getElementById('knowledgeList');
+                    const item = document.createElement('div');
+                    item.className = 'knowledge-item';
+                    item.id = `k-${saveData.id}`;
+                    item.innerHTML = `
+                        <div class="k-title">🌐 ${escapeHtml(data.title)}</div>
+                        <div class="k-content" id="kc-${saveData.id}">${escapeHtml(data.text)}</div>
+                        <button class="btn-expand" onclick="toggleExpand(${saveData.id})">続きを見る</button>
+                        <button class="btn-edit" onclick="openEdit(${saveData.id}, this)">✏️</button>
+                        <button class="btn-delete" onclick="deleteKnowledge(${saveData.id})">✕</button>
+                    `;
+                    list.prepend(item);
+                    document.getElementById('urlInput').value = '';
+                }
+            } else {
+                status.className = 'pdf-status error';
+                status.textContent = `❌ ${data.error}`;
+            }
+        } catch(e) {
+            status.className = 'pdf-status error';
+            status.textContent = '❌ 取得に失敗しました';
+        }
     }
 
     // 補足情報：ファイル添付

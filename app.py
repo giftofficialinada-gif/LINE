@@ -343,6 +343,38 @@ def upload_image():
         return jsonify({"error": f"画像の読み込みに失敗しました：{str(e)}"}), 500
 
 
+@app.route("/api/fetch_url", methods=["POST"])
+def fetch_url():
+    import re
+    import requests as req
+    from bs4 import BeautifulSoup
+    data = request.json
+    url = data.get("url", "").strip()
+    if not url:
+        return jsonify({"error": "URLを入力してください"}), 400
+    if not url.startswith(("http://", "https://")):
+        return jsonify({"error": "正しいURLを入力してください（https://...）"}), 400
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"}
+        response = req.get(url, headers=headers, timeout=15)
+        response.encoding = response.apparent_encoding
+        soup = BeautifulSoup(response.text, "html.parser")
+        for tag in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
+            tag.decompose()
+        text = soup.get_text(separator="\n", strip=True)
+        text = re.sub(r'\n{3,}', '\n\n', text).strip()
+        if not text:
+            return jsonify({"error": "ページからテキストを取得できませんでした"}), 400
+        if len(text) > 50000:
+            text = text[:50000] + "\n\n（文字数制限のため以降省略）"
+        title = soup.title.string.strip() if soup.title and soup.title.string else url
+        return jsonify({"success": True, "title": title, "text": text, "chars": len(text)})
+    except req.exceptions.Timeout:
+        return jsonify({"error": "タイムアウトしました。URLを確認してください"}), 500
+    except Exception as e:
+        return jsonify({"error": f"取得に失敗しました：{str(e)}"}), 500
+
+
 @app.route("/api/extract_attachment", methods=["POST"])
 def extract_attachment():
     if "file" not in request.files:
